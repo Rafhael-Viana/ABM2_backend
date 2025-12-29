@@ -16,6 +16,7 @@ type User struct {
 	Name       string     `json:"name"`
 	Senha      string     `json:"senha"`
 	Setor      string     `json:"setor"`
+	Setor_ID   string     `json:"setor_id"`
 	Cargo      string     `json:"cargo"`
 	Nascimento *time.Time `json:"birth"`
 	Username   string     `json:"username"`
