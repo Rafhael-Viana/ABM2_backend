@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -262,4 +265,70 @@ func DeleteUser(database *db.Database) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 	}
+}
+
+// --- UPLOAD FILE ---
+func UploadUserFile(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		http.Error(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	err := r.ParseMultipartForm(10 << 20) // 10MB
+	if err != nil {
+		http.Error(w, "File too large", http.StatusBadRequest)
+		return
+	}
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Invalid file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	allowed := map[string]string{
+		"image/png":       "images",
+		"image/jpeg":      "images",
+		"audio/mpeg":      "audios",
+		"application/pdf": "docs",
+	}
+
+	contentType := handler.Header.Get("Content-Type")
+	subDir, ok := allowed[contentType]
+	if !ok {
+		http.Error(w, "File type not allowed", http.StatusForbidden)
+		return
+	}
+
+	// uploads/{user_id}/{images|audios|docs}
+	userDir := filepath.Join("uploads", userID, subDir)
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		http.Error(w, "Failed to create user directory", http.StatusInternalServerError)
+		return
+	}
+
+	ext := filepath.Ext(handler.Filename)
+	filename := uuid.New().String() + ext
+
+	fullPath := filepath.Join(userDir, filename)
+
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(w, "Failed to write file", http.StatusInternalServerError)
+		return
+	}
+
+	fileURL := fmt.Sprintf("/uploads/%s/%s/%s", userID, subDir, filename)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, `{"url":"%s"}`, fileURL)
 }
