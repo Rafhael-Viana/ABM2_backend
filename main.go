@@ -27,6 +27,18 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	uploadDir := "./uploads"
+
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Fatalf("Error creating upload dir: %v", err)
+	}
+
+	// Serve Files Route
+	mux.Handle(
+		"GET /uploads/",
+		http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))),
+	)
+
 	// Health Check Route
 	mux.Handle("GET /api/hello", http.HandlerFunc(routes.Hello))
 
@@ -39,6 +51,7 @@ func main() {
 	mux.Handle("GET /api/users/{id}", routes.GetUser(pool))
 	mux.Handle("PATCH /api/users/{id}", routes.UpdateUser(pool))
 	mux.Handle("DELETE /api/users/{id}", routes.DeleteUser(pool)) // /users/{id}
+	mux.HandleFunc("POST /api/users/{id}/upload", routes.UploadUserFile)
 
 	// Rotas de CRUD Ponto Funcionário
 	mux.Handle("POST /api/points", routes.CreatePoint(pool))
