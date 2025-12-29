@@ -56,9 +56,9 @@ func main() {
 	// Rotas de CRUD Ponto Funcionário
 	mux.Handle("POST /api/points", routes.CreatePoint(pool))
 	mux.Handle("GET /api/points", routes.ListPoints(pool))
-	mux.Handle("GET /api/points/", routes.GetPoint(pool))       // /users/{id}
-	mux.Handle("PATCH /api/points/", routes.UpdatePoint(pool))  // /users/{id}
-	mux.Handle("DELETE /api/points/", routes.DeletePoint(pool)) // /users/{id}
+	mux.Handle("GET /api/points/{id}", routes.GetPoint(pool))       // /users/{id}
+	mux.Handle("PATCH /api/points/{id}", routes.UpdatePoint(pool))  // /users/{id}
+	mux.Handle("DELETE /api/points/{id}", routes.DeletePoint(pool)) // /users/{id}
 
 	// rotas permitidas
 	allowedOrigins := []string{
