@@ -60,6 +60,13 @@ func main() {
 	mux.Handle("PATCH /api/points/{id}", routes.UpdatePoint(pool))  // /users/{id}
 	mux.Handle("DELETE /api/points/{id}", routes.DeletePoint(pool)) // /users/{id}
 
+	// Rotas de CRUD Setores
+	mux.Handle("POST /api/setor", routes.CreateSetor(pool))
+	mux.Handle("GET /api/setor", routes.ListSetores(pool))
+	mux.Handle("GET /api/setor/{id}", routes.GetSetor(pool))       // /users/{id}
+	mux.Handle("PATCH /api/setor/{id}", routes.UpdateSetor(pool))  // /users/{id}
+	mux.Handle("DELETE /api/setor/{id}", routes.DeleteSetor(pool)) // /users/{id}
+
 	// rotas permitidas
 	allowedOrigins := []string{
 		"http://localhost:3000", // dev
