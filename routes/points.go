@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Rafhael-Viana/m/db"
@@ -20,11 +24,24 @@ import (
 func CreatePoint(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		var input struct {
-			UserID string `json:"user_id"`
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			return
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		// -------- JSON --------
+		data := r.FormValue("data")
+		if data == "" {
+			http.Error(w, "data is required", http.StatusBadRequest)
+			return
+		}
+
+		var input struct {
+			UserID   string `json:"user_id"`
+			Location string `json:"location"`
+		}
+
+		if err := json.Unmarshal([]byte(data), &input); err != nil {
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
@@ -34,51 +51,100 @@ func CreatePoint(database *db.Database) http.HandlerFunc {
 			return
 		}
 
+		// -------- FILE --------
+		file, handler, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "photo file is required", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		allowed := map[string]bool{
+			"image/jpeg": true,
+			"image/png":  true,
+		}
+
+		contentType := handler.Header.Get("Content-Type")
+		if !allowed[contentType] {
+			http.Error(w, "invalid image type", http.StatusForbidden)
+			return
+		}
+
+		now := time.Now()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// 1️⃣ Verifica se existe ponto aberto
+		// -------- CHECK OPEN POINT --------
 		var pointID int
-		err := database.Pool().QueryRow(ctx, `
+		err = database.Pool().QueryRow(ctx, `
 			SELECT id FROM points
 			WHERE user_id = $1 AND status = 'open'
 		`, input.UserID).Scan(&pointID)
 
-		now := time.Now()
-
-		// 2️⃣ Se NÃO existir → cria clock_in
+		// -------- CLOCK-IN --------
 		if errors.Is(err, pgx.ErrNoRows) {
 
-			query := `
-				INSERT INTO points (user_id, clock_in, status)
-				VALUES ($1, $2, 'open')
-				RETURNING id
-			`
+			dir := filepath.Join("uploads", "points", input.UserID, "in")
+			os.MkdirAll(dir, 0755)
 
-			var id int
-			err := database.Pool().QueryRow(ctx, query, input.UserID, now).Scan(&id)
+			filename := uuid.New().String() + filepath.Ext(handler.Filename)
+			fullPath := filepath.Join(dir, filename)
+
+			dst, _ := os.Create(fullPath)
+			defer dst.Close()
+			io.Copy(dst, file)
+
+			photoIn := fmt.Sprintf("/uploads/points/%s/in/%s", input.UserID, filename)
+
+			err = database.Pool().QueryRow(ctx, `
+				INSERT INTO points (
+					user_id, clock_in, status,
+					location_in, photo_in
+				)
+				VALUES ($1,$2,'open',$3,$4)
+				RETURNING id
+			`, input.UserID, now, input.Location, photoIn).Scan(&pointID)
+
 			if err != nil {
 				http.Error(w, "error creating point", http.StatusInternalServerError)
 				return
 			}
 
 			json.NewEncoder(w).Encode(map[string]any{
-				"id":       id,
-				"status":   "open",
-				"clock_in": now,
+				"id":          pointID,
+				"status":      "open",
+				"clock_in":    now,
+				"location_in": input.Location,
+				"photo_in":    photoIn,
 			})
 			return
 		}
 
-		// 3️⃣ Se EXISTIR → fecha com clock_out
+		// -------- CLOCK-OUT --------
 		if err == nil {
+
+			dir := filepath.Join("uploads", "points", input.UserID, "out")
+			os.MkdirAll(dir, 0755)
+
+			filename := uuid.New().String() + filepath.Ext(handler.Filename)
+			fullPath := filepath.Join(dir, filename)
+
+			dst, _ := os.Create(fullPath)
+			defer dst.Close()
+			io.Copy(dst, file)
+
+			photoOut := fmt.Sprintf("/uploads/points/%s/out/%s", input.UserID, filename)
+
 			_, err := database.Pool().Exec(ctx, `
 				UPDATE points
 				SET clock_out = $1,
 				    status = 'close',
+				    location_out = $2,
+				    photo_out = $3,
 				    updated_at = now()
-				WHERE id = $2
-			`, now, pointID)
+				WHERE id = $4
+			`, now, input.Location, photoOut, pointID)
 
 			if err != nil {
 				http.Error(w, "error closing point", http.StatusInternalServerError)
@@ -86,9 +152,11 @@ func CreatePoint(database *db.Database) http.HandlerFunc {
 			}
 
 			json.NewEncoder(w).Encode(map[string]any{
-				"id":        pointID,
-				"status":    "close",
-				"clock_out": now,
+				"id":           pointID,
+				"status":       "close",
+				"clock_out":    now,
+				"location_out": input.Location,
+				"photo_out":    photoOut,
 			})
 			return
 		}
@@ -138,6 +206,7 @@ func GetPoint(database *db.Database) http.HandlerFunc {
 		idStr := r.PathValue("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
+			fmt.Println(err)
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
