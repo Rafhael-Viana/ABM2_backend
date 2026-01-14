@@ -67,6 +67,10 @@ func main() {
 	mux.Handle("PATCH /api/setor/{id}", routes.UpdateSetor(pool))  // /users/{id}
 	mux.Handle("DELETE /api/setor/{id}", routes.DeleteSetor(pool)) // /users/{id}
 
+	// Relatórios
+	mux.Handle("GET /api/reports/points", routes.ReportPoints(pool))
+	mux.Handle("GET /api/reports/frequency", routes.ReportFrequency(pool))
+
 	// rotas permitidas
 	allowedOrigins := []string{
 		"http://localhost:3000", // dev

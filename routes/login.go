@@ -30,13 +30,14 @@ func (l *LoginResponse) setToken(token string) {
 }
 
 // geraToken cria um JWT com expiração
-func geraToken(userID string, username string) (string, error) {
+func geraToken(userID string, username string, role string) (string, error) {
 	godotenv.Load()
 	var jwtSecret = []byte(os.Getenv("JWT_SECRET")) // defina JWT_SECRET no ambiente
 
 	claims := jwt.MapClaims{
 		"user_id":  userID,
 		"username": username,
+		"role":     role,
 		"exp":      time.Now().Add(time.Hour * 24).Unix(), // expira em 24h
 		"iat":      time.Now().Unix(),
 	}
@@ -102,7 +103,7 @@ func Login(database *db.Database) http.HandlerFunc {
 		}
 
 		// gera jwt token
-		token, err := geraToken(userID, u.Username)
+		token, err := geraToken(userID, u.Username, u.Role)
 		if err != nil {
 			log.Println(err)
 			return
