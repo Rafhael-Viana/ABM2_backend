@@ -35,18 +35,19 @@ func CreateSetor(database *db.Database) http.HandlerFunc {
 		defer cancel()
 
 		query := `
-			INSERT INTO setores (setor_id, nome, quantidade, lider, created_by)
-			VALUES ($1,$2,$3,$4,$5)
+			INSERT INTO setores (setor_id, nome, quantidade, lider, created_by, lider_id)
+			VALUES ($1,$2,$3,$4,$5, $6)
 		`
 
 		_, err := database.Pool().Exec(
 			ctx,
 			query,
-			s.Setor_ID,
-			s.Nome,
-			s.Quantidade,
-			s.Lider,
-			s.CreatedBy,
+			s.Setor_ID,   // $1 setor_id
+			s.Nome,       // $2 nome
+			s.Quantidade, // $3 quantidade
+			s.Lider,      // $4 lider
+			s.CreatedBy,  // $5 created_by
+			s.Lider_ID,   // $6 lider_id
 		)
 
 		if err != nil {
@@ -65,7 +66,7 @@ func ListSetores(database *db.Database) http.HandlerFunc {
 		defer cancel()
 
 		rows, err := database.Pool().Query(ctx, `
-			SELECT setor_id, nome, quantidade, lider, created_by, created_at
+			SELECT id, setor_id, nome, quantidade, lider, created_by, created_at, lider_id
 			FROM setores
 			ORDER BY nome
 		`)
@@ -79,14 +80,17 @@ func ListSetores(database *db.Database) http.HandlerFunc {
 		for rows.Next() {
 			var s models.Setor
 			if err := rows.Scan(
+				&s.ID,
 				&s.Setor_ID,
 				&s.Nome,
 				&s.Quantidade,
 				&s.Lider,
 				&s.CreatedBy,
 				&s.CreatedAt,
+				&s.Lider_ID,
 			); err != nil {
 				http.Error(w, "scan error", http.StatusInternalServerError)
+				fmt.Printf("Error: %s", err)
 				return
 			}
 			setores = append(setores, s)
@@ -129,6 +133,7 @@ func GetSetor(database *db.Database) http.HandlerFunc {
 		rows, err := database.Pool().Query(ctx, query, setorID)
 		if err != nil {
 			http.Error(w, "database error", http.StatusInternalServerError)
+			fmt.Printf("Error: %s", err)
 			return
 		}
 		defer rows.Close()
@@ -161,6 +166,7 @@ func GetSetor(database *db.Database) http.HandlerFunc {
 				&atestado,
 			); err != nil {
 				http.Error(w, "scan error", http.StatusInternalServerError)
+				fmt.Printf("Error: %s", err)
 				return
 			}
 
@@ -265,4 +271,3 @@ func DeleteSetor(database *db.Database) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 	}
 }
-
