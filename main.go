@@ -74,7 +74,9 @@ func main() {
 
 	// rotas permitidas
 	allowedOrigins := []string{
-		"http://localhost:3000", // dev
+		"http://localhost:3000",
+		"https://insociable-nicola-eastwardly.ngrok-free.dev",
+		"https://validpr.freedompbx.online",
 	}
 	handler := cors.Cors(allowedOrigins, true /* usa cookies/credenciais? */)(mux)
 
