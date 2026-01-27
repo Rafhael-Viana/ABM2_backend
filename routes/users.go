@@ -110,7 +110,11 @@ func ListUsers(database *db.Database) http.HandlerFunc {
 		var users []models.User
 		for rows.Next() {
 			var u models.User
-			rows.Scan(&u.ID, &u.Name)
+			err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.User_ID, &u.Setor, &u.Cargo, &u.Nascimento, &u.Status, &u.Role, &u.Setor_ID)
+			if err != nil {
+				http.Error(w, "error fetching users: ", http.StatusInternalServerError)
+				log.Println("DB error fetching users:", err) // log no servidor
+			}
 			users = append(users, u)
 		}
 
@@ -133,13 +137,14 @@ func GetUser(database *db.Database) http.HandlerFunc {
 		defer cancel()
 
 		var u models.User
-		query := `SELECT id, name FROM users WHERE id = $1`
-		err = database.Pool().QueryRow(ctx, query, id).Scan(&u.ID, &u.Name)
+		query := `SELECT id, name, email, username, user_id, setor, cargo, nascimento, status, role, setor_id FROM users WHERE id = $1`
+		err = database.Pool().QueryRow(ctx, query, id).Scan(&u.ID, &u.Name, &u.Email, &u.Username, &u.User_ID, &u.Setor, &u.Cargo, &u.Nascimento, &u.Status, &u.Role, &u.Setor_ID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
 		} else if err != nil {
 			http.Error(w, "database error", http.StatusInternalServerError)
+			log.Println("DB error fetching users:", err) // log no servidor
 			return
 		}
 
