@@ -87,6 +87,21 @@ func CreateUser(database *db.Database) http.HandlerFunc {
 			return
 		}
 
+		if u.Setor_ID != nil {
+			_, err = database.Pool().Exec(ctx, `
+			INSERT INTO setor_funcionarios (setor_id, user_id, total_semana, total_mes, total_extra_mes, faltas, atestado)
+			VALUES ($1, $2, 0, 0, 0, 0, 0)
+			ON CONFLICT (user_id)
+			DO UPDATE SET setor_id = EXCLUDED.setor_id
+			`, u.Setor_ID, u.User_ID)
+
+			if err != nil {
+				log.Println("DB error linking user to setor:", err)
+				http.Error(w, "could not link user to setor", http.StatusInternalServerError)
+				return
+			}
+		}
+
 		u.Senha = ""
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(u)
@@ -99,7 +114,7 @@ func ListUsers(database *db.Database) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		rows, err := database.Pool().Query(ctx, `SELECT id, name FROM users ORDER BY id`)
+		rows, err := database.Pool().Query(ctx, `SELECT id, name, email, username, user_id, setor, cargo, nascimento, status, role, setor_id FROM users ORDER BY id`)
 		if err != nil {
 			log.Println("DB error fetching users:", err) // log no servidor
 			http.Error(w, "error fetching users: ", http.StatusInternalServerError)
@@ -182,8 +197,9 @@ func UpdateUser(database *db.Database) http.HandlerFunc {
 
 		// Itera sobre os campos do input para verificar as mudanças
 		for key, value := range input {
+			fmt.Println("key: ", key)
 			switch key {
-			case "name", "setor", "cargo", "role":
+			case "name", "setor", "setor_id", "cargo", "role":
 				fields = append(fields, fmt.Sprintf("%s = $%d", key, i))
 				values = append(values, value)
 				i++
@@ -235,7 +251,36 @@ func UpdateUser(database *db.Database) http.HandlerFunc {
 		cmd, err := database.Pool().Exec(ctx, query, values...)
 		if err != nil || cmd.RowsAffected() == 0 {
 			http.Error(w, "user not found or not updated", http.StatusNotFound)
+			fmt.Printf("Error: %s", err)
 			return
+		}
+
+		// depois do UPDATE, se input tinha "setor_id":
+		if newSetorIDRaw, ok := input["setor_id"]; ok {
+			newSetorID := fmt.Sprint(newSetorIDRaw)
+
+			var userUUID string
+			err := database.Pool().QueryRow(ctx, `SELECT user_id FROM users WHERE id = $1`, id).Scan(&userUUID)
+			if err != nil {
+				http.Error(w, "could not load user uuid", http.StatusInternalServerError)
+				return
+			}
+
+			// se veio vazio, remove vínculo; se veio preenchido, cria/atualiza
+			if newSetorID == "" {
+				_, _ = database.Pool().Exec(ctx, `DELETE FROM setor_funcionarios WHERE user_id = $1`, userUUID)
+			} else {
+				_, err = database.Pool().Exec(ctx, `
+				INSERT INTO setor_funcionarios (setor_id, user_id, total_semana, total_mes, total_extra_mes, faltas, atestado)
+				VALUES ($1, $2, 0, 0, 0, 0, 0)
+				ON CONFLICT (user_id)
+				DO UPDATE SET setor_id = EXCLUDED.setor_id
+				`, newSetorID, userUUID)
+				if err != nil {
+					http.Error(w, "could not update setor link", http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 
 		// Retornar resposta de sucesso
