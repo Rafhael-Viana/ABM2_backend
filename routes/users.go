@@ -244,6 +244,9 @@ func UpdateUser(database *db.Database) http.HandlerFunc {
 			len(values),
 		)
 
+		// fmt.Println("QUERY:", query)
+		// fmt.Printf("VALUES: %#v\n", values)
+
 		// Executar a query
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
