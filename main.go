@@ -2,6 +2,7 @@ package main
 
 import (
 	// "context"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,7 +24,7 @@ func main() {
 		log.Fatalf("Error connecting database: %v", err)
 	}
 
-	// pool.Ping(context.Background())
+	pool.Ping(context.Background())
 
 	mux := http.NewServeMux()
 
