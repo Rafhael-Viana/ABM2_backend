@@ -69,6 +69,7 @@ func main() {
 	mux.Handle("DELETE /api/setor/{id}", routes.DeleteSetor(pool)) // /users/{id}
 
 	// Relatórios
+	mux.Handle("GET /api/reports", routes.ReportWork(pool))
 	mux.Handle("GET /api/reports/points", routes.ReportPoints(pool))
 	mux.Handle("GET /api/reports/frequency", routes.ReportFrequency(pool))
 

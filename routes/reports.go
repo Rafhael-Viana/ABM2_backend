@@ -361,3 +361,57 @@ func ReportFrequency(database *db.Database) http.HandlerFunc {
 		})
 	}
 }
+
+// GET /reports?user_id=uuid
+func ReportWork(database *db.Database) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		q := r.URL.Query()
+		dayStr := strings.TrimSpace(q.Get("day")) // "2026-01-21"
+		userId := strings.TrimSpace(q.Get("user_id"))
+
+		var (
+			dia      time.Time
+			totalSeg int64
+			total    string
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		query := `
+			WITH t AS (
+				SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (p.clock_out - p.clock_in))), 0)::bigint AS total_segundos
+				FROM points p
+				WHERE p.user_id = $1
+					AND p.clock_out IS NOT NULL
+					AND date(p.clock_in) = $2::date
+			)
+			SELECT
+				$2::date AS dia,
+				t.total_segundos,
+				(
+					FLOOR(t.total_segundos / 3600.0)::int::text
+					|| ':' ||
+					LPAD((FLOOR(t.total_segundos / 60.0) % 60)::int::text, 2, '0')
+					|| ':' ||
+					LPAD((t.total_segundos % 60)::int::text, 2, '0')
+				) AS total_hhmmss
+			FROM t;
+			`
+
+		err := database.Pool().QueryRow(ctx, query, userId, dayStr).Scan(&dia, &totalSeg, &total)
+		if err != nil {
+			http.Error(w, "error retrieving worked time", http.StatusInternalServerError)
+			fmt.Printf("Err: %s\n", err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"day":           dia.Format("2006-01-02"),
+			"total_seconds": totalSeg,
+			"total":         total,
+		})
+
+	}
+}
